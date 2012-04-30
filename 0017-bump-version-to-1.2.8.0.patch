@@ -1,0 +1,30 @@
+From 9736fb5b7c733906d83183055414cb97019941cf Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Tue, 5 Apr 2011 11:02:25 -0600
+Subject: [PATCH] bump version to 1.2.8.0
+
+---
+ VERSION.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/VERSION.sh b/VERSION.sh
+index f1c5c1b..ed843f0 100644
+--- a/VERSION.sh
++++ b/VERSION.sh
+@@ -10,11 +10,11 @@ vendor="389 Project"
+ # PACKAGE_VERSION is constructed from these
+ VERSION_MAJOR=1
+ VERSION_MINOR=2
+-VERSION_MAINT=8
++VERSION_MAINT=8.0
+ # if this is a PRERELEASE, set VERSION_PREREL
+ # otherwise, comment it out
+ # be sure to include the dot prefix in the prerel
+-VERSION_PREREL=.rc4
++#VERSION_PREREL=.rc5
+ # NOTES on VERSION_PREREL
+ # use aN for an alpha release e.g. a1, a2, etc.
+ # use rcN for a release candidate e.g. rc1, rc2, etc.
+-- 
+1.7.1
+

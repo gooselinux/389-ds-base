@@ -1,0 +1,26 @@
+From 23fa9cc2205489b73d6e8ecf593fa548deeb4e57 Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Thu, 14 Apr 2011 14:10:19 -0600
+Subject: [PATCH 21/21] bump version to 1.2.8.2
+ (cherry picked from commit 903b3ae3b1550df011a77add6369e3d9bc02cf7b)
+
+---
+ VERSION.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/VERSION.sh b/VERSION.sh
+index a5696cd..aaae4f0 100644
+--- a/VERSION.sh
++++ b/VERSION.sh
+@@ -10,7 +10,7 @@ vendor="389 Project"
+ # PACKAGE_VERSION is constructed from these
+ VERSION_MAJOR=1
+ VERSION_MINOR=2
+-VERSION_MAINT=8.1
++VERSION_MAINT=8.2
+ # if this is a PRERELEASE, set VERSION_PREREL
+ # otherwise, comment it out
+ # be sure to include the dot prefix in the prerel
+-- 
+1.7.1
+

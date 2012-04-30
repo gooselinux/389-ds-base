@@ -1,0 +1,32 @@
+From cc42a22c7242dd3aa83cc280248a956b1687f56b Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Tue, 29 Mar 2011 14:52:27 -0600
+Subject: [PATCH 11/11] bump version to 1.2.8.rc4 - bump ds console version to 1.2.5
+ (cherry picked from commit 428efffb9232d3c3f4e4ea84d07e1fcd98f2cce3)
+
+---
+ VERSION.sh |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/VERSION.sh b/VERSION.sh
+index 834f560..f1c5c1b 100644
+--- a/VERSION.sh
++++ b/VERSION.sh
+@@ -14,7 +14,7 @@ VERSION_MAINT=8
+ # if this is a PRERELEASE, set VERSION_PREREL
+ # otherwise, comment it out
+ # be sure to include the dot prefix in the prerel
+-VERSION_PREREL=.rc3
++VERSION_PREREL=.rc4
+ # NOTES on VERSION_PREREL
+ # use aN for an alpha release e.g. a1, a2, etc.
+ # use rcN for a release candidate e.g. rc1, rc2, etc.
+@@ -50,4 +50,4 @@ PACKAGE_BUGREPORT="${PACKAGE_BUGREPORT}enter_bug.cgi?product=$brand"
+ PACKAGE_STRING="$PACKAGE_TARNAME $PACKAGE_VERSION"
+ # the version of the ds console package that this directory server
+ # is compatible with
+-CONSOLE_VERSION=$VERSION_MAJOR.$VERSION_MINOR.4
++CONSOLE_VERSION=$VERSION_MAJOR.$VERSION_MINOR.5
+-- 
+1.7.1
+

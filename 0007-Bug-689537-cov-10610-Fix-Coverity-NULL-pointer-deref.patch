@@ -1,0 +1,27 @@
+From 6b063b86bfecc0058110100389f2d61ac3a66f38 Mon Sep 17 00:00:00 2001
+From: Nathan Kinder <nkinder@redhat.com>
+Date: Tue, 22 Mar 2011 10:07:04 -0700
+Subject: [PATCH 7/7] Bug 689537 - (cov#10610) Fix Coverity NULL pointer dereferences
+
+The changelog import code releases the replica object when it is
+NULL, causing a NULL pointer dereference.  We should not be calling
+the release function if replica_obj is NULL.
+---
+ ldap/servers/plugins/replication/cl5_api.c |    1 -
+ 1 files changed, 0 insertions(+), 1 deletions(-)
+
+diff --git a/ldap/servers/plugins/replication/cl5_api.c b/ldap/servers/plugins/replication/cl5_api.c
+index b3078b0..0e240c8 100644
+--- a/ldap/servers/plugins/replication/cl5_api.c
++++ b/ldap/servers/plugins/replication/cl5_api.c
+@@ -1039,7 +1039,6 @@ cl5ImportLDIF (const char *clDir, const char *ldifFile, Object **replicas)
+                         "failed to write operation to the changelog: "
+                         "type: %lu, dn: %s\n",
+                         op.operation_type, op.target_address.dn);
+-                object_release (replica_obj);
+                 slapi_ch_free_string(&replGen);
+                 operation_parameters_done (&op);
+                 goto done;
+-- 
+1.7.1
+

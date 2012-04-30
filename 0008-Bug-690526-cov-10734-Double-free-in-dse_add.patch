@@ -1,0 +1,60 @@
+From d627203b60e101d07662547e57ec44c7ce40bc90 Mon Sep 17 00:00:00 2001
+From: Nathan Kinder <nkinder@redhat.com>
+Date: Thu, 24 Mar 2011 08:15:29 -0700
+Subject: [PATCH 8/8] Bug 690526 - (cov#10734) Double free in dse_add()
+
+It's possible to encounter a double free of a Slapi_Entry in an
+error condition in dse_add().  This function makes a copy of the
+entry being added for use by postop plug-ins, but it can be free'd
+twice in the following code:
+
+  e_copy = slapi_entry_dup(e);
+  if ( dse_add_entry_pb(pdse, e_copy, pb) != 0)
+  {
+      slapi_send_ldap_result( pb, LDAP_OPERATIONS_ERROR, NULL, NULL,
+                              0, NULL );
+      slapi_sdn_done(&sdn);
+      return dse_add_return(error, e_copy);
+  }
+
+The dse_add_entry_pb() function frees the passed in entry in all
+conditions, but dse_add_return() also free's the passed in entry.
+This double free could trigger a crash.
+
+The way dse_add works is that entry in SLAPI_ADD_ENTRY in the
+pblock should be consumed upon success, but will be left for
+the caller to deal with upon failure.  We should be passing NULL
+for the second argument to dse_add_return() to avoid the double
+free.
+(cherry picked from commit 753c55017477fe3201d4d156cd90707d0ea5be13)
+---
+ ldap/servers/slapd/dse.c |    6 ++----
+ 1 files changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/ldap/servers/slapd/dse.c b/ldap/servers/slapd/dse.c
+index d5d3e23..0c5949c 100644
+--- a/ldap/servers/slapd/dse.c
++++ b/ldap/servers/slapd/dse.c
+@@ -1071,9 +1071,7 @@ dse_write_entry( caddr_t data, caddr_t arg )
+   
+ /*
+  * Adds an entry to the dse backend.  The passed in entry will be
+- * free'd upon success.  If we don't return 0, the caller is responsible
+- * for freeing the entry.
+- */
++ * free'd always. */
+ static int
+ dse_add_entry_pb(struct dse* pdse, Slapi_Entry *e, Slapi_PBlock *pb)
+ {
+@@ -2072,7 +2070,7 @@ dse_add(Slapi_PBlock *pb) /* JCM There should only be one exit point from this f
+     {
+         slapi_send_ldap_result( pb, LDAP_OPERATIONS_ERROR, NULL, NULL, 0, NULL );
+ 		slapi_sdn_done(&sdn);
+-		return dse_add_return(error, e_copy);
++		return dse_add_return(error, NULL);
+     }
+ 	/* The postop must be called after the write lock is released. */
+     dse_call_callback(pdse, pb, SLAPI_OPERATION_ADD, DSE_FLAG_POSTOP, e, NULL, &returncode, returntext);
+-- 
+1.7.1
+

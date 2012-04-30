@@ -1,0 +1,139 @@
+From 0be74bfa47c174ca6a713266169d2fe95a3e1974 Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Fri, 8 Apr 2011 11:55:27 -0600
+Subject: [PATCH 18/19] Bug 693962 - Full replica push loses some entries with multi-valued RDNs
+
+https://bugzilla.redhat.com/show_bug.cgi?id=693962
+Resolves: bug 693962
+Bug Description: Full replica push loses some entries with multi-valued RDNs
+Reviewed by: nhosoi (Thanks!)
+Branch: RHEL-6
+Fix Description: The code in _entryrdn_insert_key was assuming the srdn
+passed in was already normalized.  This is not true in some cases where
+the data is coming from a source of old data such as replication with an
+older server.  The solution is to make sure the rdn code always
+normalizes the code using slapi_dn_normalize_case_ext() instead of
+slapi_dn_normalize_case() which now doesn't do any normalization, it just
+converts the given string to lower case.  I added a function
+normalize_case_helper() to return a normalized dn as a copy or in place
+depending on the arguments.
+Tested with gdb - stepped through and verified the char arrays are correctly
+replaced, and copy values are correctly assigned.
+Used valgrind with online import to verify no leaks or errors.
+Exported a netscaperoot ldif from an older 1.2.8 server and imported with
+the new code.  Verified that the dbscan -f entryrdn.db4 output was
+identical between the two.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+(cherry picked from commit 2472169b3e077ff379812f9e91f439ce1e4edffb)
+(cherry picked from commit 54b95201cfc274c72e2364f49fc21b8a8e8fa688)
+---
+ ldap/servers/slapd/rdn.c |   56 +++++++++++++++++++++++++++++++++++++++++-----
+ 1 files changed, 50 insertions(+), 6 deletions(-)
+
+diff --git a/ldap/servers/slapd/rdn.c b/ldap/servers/slapd/rdn.c
+index e8b7915..758c16b 100644
+--- a/ldap/servers/slapd/rdn.c
++++ b/ldap/servers/slapd/rdn.c
+@@ -614,6 +614,52 @@ slapi_rdn_get_rdn(const Slapi_RDN *srdn)
+ 	return srdn->rdn;
+ }
+ 
++/*
++ * if src is set, make a copy and return in inplace
++ * if *inplace is set, try to use that in place, or
++ * free it and set to a new value
++ */
++static void
++normalize_case_helper(const char *copy, char **inplace)
++{
++    int rc;
++    char **newdnaddr = NULL;
++    char *newdn = NULL;
++    char *dest = NULL;
++    size_t dest_len = 0;
++
++    if (!inplace) { /* no place to put result */
++        return;
++    }
++
++    if (!copy && !*inplace) { /* no string to operate on */
++        return;
++    }
++
++    if (copy) {
++        newdn = slapi_ch_strdup(copy);
++        newdnaddr = &newdn;
++    } else {
++        newdnaddr = inplace;
++    }
++
++    rc = slapi_dn_normalize_case_ext(*newdnaddr, 0, &dest, &dest_len);
++    if (rc < 0) {
++        /* we give up, just case normalize in place */
++        slapi_dn_ignore_case(*newdnaddr); /* ignore case */
++    } else if (rc == 0) {
++        /* dest points to *newdnaddr - normalized in place */
++        *(dest + dest_len) = '\0';
++    } else {
++        /* dest is a new string */
++        slapi_ch_free_string(newdnaddr);
++        *newdnaddr = dest;
++    }
++
++    *inplace = *newdnaddr;
++    return;
++}
++
+ /* srdn is updated in the function, it cannot be const */
+ const char *
+ slapi_rdn_get_nrdn(Slapi_RDN *srdn)
+@@ -624,8 +670,7 @@ slapi_rdn_get_nrdn(Slapi_RDN *srdn)
+ 	}
+ 	if (NULL == srdn->nrdn)
+ 	{
+-		srdn->nrdn = slapi_ch_strdup(srdn->rdn);
+-		slapi_dn_normalize_case(srdn->nrdn);
++		normalize_case_helper(srdn->rdn, &srdn->nrdn);
+ 	}
+ 	return (const char *)srdn->nrdn;
+ }
+@@ -668,7 +713,7 @@ slapi_rdn_get_first_ext(Slapi_RDN *srdn, const char **firstrdn, int flag)
+ 			srdn->all_nrdns = charray_dup(srdn->all_rdns);
+ 			for (ptr = srdn->all_nrdns; ptr && *ptr; ptr++)
+ 			{
+-				slapi_dn_normalize_case(*ptr);
++				normalize_case_helper(NULL, ptr);
+ 			}
+ 		}
+ 		ptr = srdn->all_nrdns;
+@@ -720,7 +765,7 @@ slapi_rdn_get_last_ext(Slapi_RDN *srdn, const char **lastrdn, int flag)
+ 			srdn->all_nrdns = charray_dup(srdn->all_rdns);
+ 			for (ptr = srdn->all_nrdns; ptr && *ptr; ptr++)
+ 			{
+-				slapi_dn_normalize_case(*ptr);
++				normalize_case_helper(NULL, ptr);
+ 			}
+ 		}
+ 		ptr = srdn->all_nrdns;
+@@ -946,7 +991,6 @@ slapi_rdn_replace_rdn(Slapi_RDN *srdn, char *new_rdn)
+ 	slapi_ch_free_string(&(srdn->nrdn));
+ 	srdn->rdn = slapi_ch_strdup(new_rdn);
+ 	srdn->nrdn = slapi_ch_strdup(srdn->rdn);
+-	slapi_dn_normalize_case(srdn->nrdn);
+ 
+ 	if (srdn->all_rdns)
+ 	{
+@@ -985,7 +1029,7 @@ slapi_rdn_partial_dup(Slapi_RDN *from, Slapi_RDN **to, int rdnidx)
+ 		from->all_nrdns = charray_dup(from->all_rdns);
+ 		for (ptr = from->all_nrdns; ptr && *ptr; ptr++)
+ 		{
+-			slapi_dn_normalize_case(*ptr);
++			normalize_case_helper(NULL, ptr);
+ 		}
+ 	}
+ 
+-- 
+1.7.1
+

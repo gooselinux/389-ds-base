@@ -1,0 +1,58 @@
+From 7fa10040e0c1b590a5288c7ee6ad31292a4b00fd Mon Sep 17 00:00:00 2001
+From: Nathan Kinder <nkinder@redhat.com>
+Date: Mon, 7 Mar 2011 11:52:26 -0800
+Subject: [PATCH 2/7] Bug 504803 - Allow maxlogsize to be set if logmaxdiskspace is -1
+
+Both the maxlogsize and logmaxdiskspace parameters are allowed to
+have values of -1.  If you set logmaxdiskspace to -1 and then
+later attempt to set maxlogsize to any other valid value, the
+server rejects the change with an operations error.
+
+The problem is that the two parameters are compared to ensure that
+maxlogsize is not greater and the logmaxdiskspace.  We need to
+skip this check if logmaxdiskspace is unlimited (-1).  I also found
+that we were converting -1 to a smaller negative number when doing
+the MB->bytes conversion.  This causes other validation errors that
+expect -1, but not a smaller negative number.  The fix is to skip
+the conversion to bytes and just set a value of -1.
+---
+ ldap/servers/slapd/log.c |   18 +++++++++++++++---
+ 1 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/ldap/servers/slapd/log.c b/ldap/servers/slapd/log.c
+index 98090e8..f5ad2dc 100644
+--- a/ldap/servers/slapd/log.c
++++ b/ldap/servers/slapd/log.c
+@@ -4162,14 +4162,26 @@ check_log_max_size( char *maxdiskspace_str,
+     if ( maxdiskspace == -1 ) {
+         maxdiskspace = current_maxdiskspace;
+     }
+-    maxdiskspaceB = (PRInt64)maxdiskspace * LOG_MB_IN_BYTES;
++
++    if ( maxdiskspace == -1 ) {
++        maxdiskspaceB = -1;
++    } else {
++        maxdiskspaceB = (PRInt64)maxdiskspace * LOG_MB_IN_BYTES;
++    }
+ 
+     if ( mlogsize == -1 ) {
+         mlogsize = current_mlogsize;
+     }
+-    mlogsizeB = (PRInt64)mlogsize * LOG_MB_IN_BYTES;
++
++    if ( mlogsize == -1 ) {
++        mlogsizeB = -1;
++    } else {
++        mlogsizeB = (PRInt64)mlogsize * LOG_MB_IN_BYTES;
++    }
+  
+-    if ( maxdiskspace < mlogsize )
++    /* If maxdiskspace is negative, it is unlimited.  There is
++     * no need to compate it to the logsize in this case. */
++    if (( maxdiskspace >= 0 ) && ( maxdiskspace < mlogsize ))
+     {
+         /* fail */
+         PR_snprintf ( returntext, SLAPI_DSE_RETURNTEXT_SIZE,
+-- 
+1.7.1
+

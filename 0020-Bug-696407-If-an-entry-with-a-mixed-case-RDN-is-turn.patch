@@ -1,0 +1,35 @@
+From 92f9183ab564239f688fa8892e411429c0aaaa35 Mon Sep 17 00:00:00 2001
+From: Noriko Hosoi <nhosoi@redhat.com>
+Date: Wed, 13 Apr 2011 18:37:17 -0700
+Subject: [PATCH 20/21] Bug 696407 - If an entry with a mixed case RDN is turned to be
+ a tombstone, it fails to assemble DN from entryrdn
+
+https://bugzilla.redhat.com/show_bug.cgi?id=696407
+
+Description: When an entry is turned to be a tombstone, the RDN
+part is replaced with this unusual format:
+    "nsuniqueid=9a63a581-...-ca8fe9f7,uid=TestUser"
+A helper function slapi_rdn_replace_rdn was introduced to support
+the replace task, in which function, normalized rdn field "nrdn"
+was supposed to have lowered case RDN, but it was not. This patch
+fixes it.
+---
+ ldap/servers/slapd/rdn.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/ldap/servers/slapd/rdn.c b/ldap/servers/slapd/rdn.c
+index 758c16b..48d4d9e 100644
+--- a/ldap/servers/slapd/rdn.c
++++ b/ldap/servers/slapd/rdn.c
+@@ -990,7 +990,7 @@ slapi_rdn_replace_rdn(Slapi_RDN *srdn, char *new_rdn)
+ 	slapi_ch_free_string(&(srdn->rdn));
+ 	slapi_ch_free_string(&(srdn->nrdn));
+ 	srdn->rdn = slapi_ch_strdup(new_rdn);
+-	srdn->nrdn = slapi_ch_strdup(srdn->rdn);
++	normalize_case_helper(new_rdn, &srdn->nrdn);
+ 
+ 	if (srdn->all_rdns)
+ 	{
+-- 
+1.7.1
+

@@ -1,0 +1,43 @@
+From 60212271be5740aff9d4c5e0f3734b64f6926c1d Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Mon, 4 Apr 2011 11:55:30 -0600
+Subject: [PATCH 14/16] Bug 693455 - nsMatchingRule does not work with multiple values
+
+https://bugzilla.redhat.com/show_bug.cgi?id=693455
+Resolves: bug 693455
+Bug Description: nsMatchingRule does not work with multiple values
+Reviewed by: nkinder (Thanks!)
+Branch: RHEL-6
+Fix Description: The variable isFirst was not being used correctly.  Instead
+of using it, just use tmpBuf[0] to see if this is the first iteration or
+not.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+(cherry picked from commit 58902a28c077309cf0e942bfb03762d96eb9c8af)
+(cherry picked from commit 9a5ad287f2b4d0c3ce49be3107c61c00551b9314)
+---
+ ldap/servers/slapd/back-ldbm/ldbm_index_config.c |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+diff --git a/ldap/servers/slapd/back-ldbm/ldbm_index_config.c b/ldap/servers/slapd/back-ldbm/ldbm_index_config.c
+index 5575ef2..aa47584 100644
+--- a/ldap/servers/slapd/back-ldbm/ldbm_index_config.c
++++ b/ldap/servers/slapd/back-ldbm/ldbm_index_config.c
+@@ -202,12 +202,11 @@ static int ldbm_index_parse_entry(ldbm_instance *inst, Slapi_Entry *e,
+     tmpBuf[0] = 0;
+     /* Get the list of matching rules from the entry. */
+     if (0 == slapi_entry_attr_find(e, "nsMatchingRule", &attr)) {
+-        isFirst = 1;
+         for (i = slapi_attr_first_value(attr, &sval); i != -1;
+              i = slapi_attr_next_value(attr, i, &sval)) {
+             attrValue = slapi_value_get_berval(sval);
+             if (NULL != attrValue->bv_val && strlen(attrValue->bv_val) > 0) {
+-                if (isFirst) {
++                if (0 == tmpBuf[0]) {
+                     ZCAT_SAFE(tmpBuf, "", attrValue->bv_val);
+                 } else {
+                     ZCAT_SAFE(tmpBuf, ",", attrValue->bv_val);
+-- 
+1.7.1
+

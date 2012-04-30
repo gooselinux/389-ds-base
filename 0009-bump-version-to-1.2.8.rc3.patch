@@ -1,0 +1,26 @@
+From 32c6e714665944a10890ec828b071b90e4b0d71a Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Mon, 28 Mar 2011 17:13:41 -0600
+Subject: [PATCH 09/11] bump version to 1.2.8.rc3
+ (cherry picked from commit c2a13d04173c02575e538c3548a0fb33227a71eb)
+
+---
+ VERSION.sh |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/VERSION.sh b/VERSION.sh
+index e820920..834f560 100644
+--- a/VERSION.sh
++++ b/VERSION.sh
+@@ -14,7 +14,7 @@ VERSION_MAINT=8
+ # if this is a PRERELEASE, set VERSION_PREREL
+ # otherwise, comment it out
+ # be sure to include the dot prefix in the prerel
+-VERSION_PREREL=.rc2
++VERSION_PREREL=.rc3
+ # NOTES on VERSION_PREREL
+ # use aN for an alpha release e.g. a1, a2, etc.
+ # use rcN for a release candidate e.g. rc1, rc2, etc.
+-- 
+1.7.1
+

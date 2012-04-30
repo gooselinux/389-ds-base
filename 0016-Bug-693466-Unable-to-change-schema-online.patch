@@ -1,0 +1,123 @@
+From b62cf5ff8ae654dbcc63a10d8a9af316df114640 Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Mon, 4 Apr 2011 15:00:04 -0600
+Subject: [PATCH 16/16] Bug 693466 - Unable to change schema online
+
+https://bugzilla.redhat.com/show_bug.cgi?id=693466
+Resolves: bug 693466
+Bug Description: Unable to change schema online
+Reviewed by: nkinder (Thanks!)
+Branch: RHEL-6
+Fix Description: The problem is only with attributes that specify a SUP.
+There was some old code that assumed the attributes were stored in a list
+in order of SUP.  This is not the case.  They are stored in a hashtable
+which is not in any order at all.  But the check is redundant anyway.
+If a SUP is specified, the code already checks if the superior exists and
+returns an error if not.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+(cherry picked from commit 466fced49dd1b6893c19ce5a7ecd8121f6eceeab)
+(cherry picked from commit 5c1cd5f4b3519530ac62df3dd31291e4bf65852a)
+---
+ ldap/servers/slapd/schema.c |   77 -------------------------------------------
+ 1 files changed, 0 insertions(+), 77 deletions(-)
+
+diff --git a/ldap/servers/slapd/schema.c b/ldap/servers/slapd/schema.c
+index 4868b06..dc5e9a9 100644
+--- a/ldap/servers/slapd/schema.c
++++ b/ldap/servers/slapd/schema.c
+@@ -3107,65 +3107,6 @@ oc_free( struct objclass **ocp )
+ 	}
+ }
+ 
+-struct supargs{
+-        char *sup, *oid;
+-        unsigned long rc;
+-};
+-
+-static int
+-at_sup_dependency_callback(struct asyntaxinfo *asi, void *arg)
+-{
+-    struct supargs *aew = (struct supargs *)arg;
+-    int rc=ATTR_SYNTAX_ENUM_NEXT;
+-    
+-    if (!asi) {
+-        LDAPDebug(LDAP_DEBUG_ANY, "Error: no attribute types in at_schema_attributes_callback\n",
+-            0, 0, 0);
+-    } 
+-    else 
+-    {
+-        if (strcasecmp (asi->asi_oid, aew->oid ) == 0) {
+-            rc=ATTR_SYNTAX_ENUM_STOP;
+-        } else {
+-            if(asi->asi_name != NULL) {
+-                if (strcasecmp (asi->asi_name, aew->sup ) == 0) {
+-                    aew->rc=0;
+-                } else if (asi->asi_aliases) {
+-                   int i = 0;
+-
+-                    /* Loop through aliases to see if any match */
+-                   for (i=0; asi->asi_aliases[i] != NULL; i++) {
+-                       if (strcasecmp (asi->asi_aliases[i], aew->sup ) == 0) {
+-                           aew->rc=0;
+-                       }
+-                   }
+-		}
+-            }
+-        }
+-    }
+-    return rc;
+-}
+-
+-/* walks down attribute types and makes sure that the superior value is found in an attribute type
+-   preceeding in the hash table. I have concerns about collisions messing with the order here but this
+-   may be the best we can do.
+-*/
+-
+-static int
+-slapi_check_at_sup_dependency(char *sup, char *oid) 
+-{
+-    struct supargs aew;
+-    
+-    memset(&aew,0,sizeof(struct supargs));
+-    aew.rc=LDAP_TYPE_OR_VALUE_EXISTS;
+-    aew.sup=sup;
+-    aew.oid=oid;
+-    attr_syntax_enumerate_attrs(at_sup_dependency_callback, &aew, PR_FALSE);
+-    return aew.rc;
+-}
+-
+-
+-
+ /*
+  * if asipp is NULL, the attribute type is added to the global set of schema.
+  * if asipp is not NULL, the AT is not added but *asipp is set.  When you are
+@@ -3469,24 +3410,6 @@ read_at_ldif(const char *input, struct asyntaxinfo **asipp, char *errorbuf,
+             attr_syntax_return( asi_parent );
+         }
+     }
+-    /* 
+-       if we are remote (via modify_schema_dse) then check sup dependencies. Locally
+-       was done in if statement above 
+-    */
+-    
+-    if(!status) 
+-    {
+-        if(is_remote && (pSuperior != NULL))
+-        {
+-            status=slapi_check_at_sup_dependency(pSuperior, pOid);
+-        }
+-        if(LDAP_SUCCESS != status) {
+-            schema_create_errormsg( errorbuf, errorbufsize,
+-                schema_errprefix_at, first_attr_name,
+-                "Missing parent attribute syntax OID");
+-            status = LDAP_TYPE_OR_VALUE_EXISTS;
+-        }
+-    }
+ 
+     if (!status && (NULL == pSyntax)) {
+         schema_create_errormsg( errorbuf, errorbufsize, schema_errprefix_at,
+-- 
+1.7.1
+

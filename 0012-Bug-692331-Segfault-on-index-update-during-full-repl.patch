@@ -1,0 +1,145 @@
+From 151ccf0004f26d4149dd0b6167fc11129999fa2f Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Wed, 30 Mar 2011 20:00:27 -0600
+Subject: [PATCH 12/16] Bug 692331 - Segfault on index update during full replication push on 1.2.7.5
+
+https://bugzilla.redhat.com/show_bug.cgi?id=692331
+Resolves: bug 692331
+Bug Description: Segfault on index update during full replication push on 1.2.7.5
+Reviewed by: nkinder (Thanks!)
+Branch: RHEL-6
+Fix Description: The collation plugin still uses the old style index key
+generation function that uses struct berval **.  If we don't find a new
+style index key function that uses Slapi_Value**, wrap the old function
+to convert Slapi_Value** to struct berval **
+The plugin_mr code keeps track of the Slapi_Value**.  The old style
+collation code keeps track of and deletes the struct berval** values.
+We store the output keys in the MR_KEYS pblock field and free them
+in the indexer destroyer code.  The new style mr indexer code sets
+MR_KEYS to NULL so the indexer destroyer code won't try to free them
+again.
+Steps to reproduce:
+1) find or create an attribute which has an ORDERING matching rule
+(and not via inheritance - that's another bug)
+2) add or change the index for the attribute to have an nsMatchingRule
+with one of the l10n matching rules defined by the collation plugin
+e.g. 2.16.840.1.113730.3.3.2.11.1 for en or en-US
+3) add an entry which has that attribute and a valid value
+4) do an import or re-index
+
+It crashes in matchrule_values_to_keys_sv because mrINDEX is NULL
+because the old style collation plugin indexer does not support
+Slapi_Values.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+
+squash with previous commit
+(cherry picked from commit 62a7368e3aed00b44d9f1828b9235d0a2d7572cd)
+(cherry picked from commit e98229a602b3acfafd616afda743d268dae42ff2)
+---
+ ldap/servers/slapd/back-ldbm/index.c     |    8 +++++---
+ ldap/servers/slapd/back-ldbm/matchrule.c |   26 ++++++++++++++++++++++++++
+ ldap/servers/slapd/plugin_mr.c           |    2 ++
+ 3 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/ldap/servers/slapd/back-ldbm/index.c b/ldap/servers/slapd/back-ldbm/index.c
+index 03ea5e4..a4bd8a2 100644
+--- a/ldap/servers/slapd/back-ldbm/index.c
++++ b/ldap/servers/slapd/back-ldbm/index.c
+@@ -2001,6 +2001,7 @@ index_addordel_values_ext_sv(
+                 {
+                     Slapi_Value** keys = NULL;
+                     matchrule_values_to_keys_sv(pb,vals,&keys);
++                    /* the matching rule indexer owns keys now */
+                     if(keys != NULL && keys[0] != NULL)
+             	    {
+             	        /* we've computed keys */
+@@ -2008,16 +2009,17 @@ index_addordel_values_ext_sv(
+                         if ( err != 0 )
+                         {
+                             ldbm_nasty(errmsg, 1260, err);
+-                            slapi_ch_free((void **)&keys);
+-                            goto bad;
+                         }
+                     }
+                     /*
+                      * It would improve speed to save the indexer, for future use.
+                      * But, for simplicity, we destroy it now:
+                      */
++                    /* this will also free keys */
+                     destroy_matchrule_indexer(pb);
+-                    slapi_ch_free((void **)&keys);
++                    if ( err != 0 ) {
++                        goto bad;
++                    }
+                 }
+             }
+         }
+diff --git a/ldap/servers/slapd/back-ldbm/matchrule.c b/ldap/servers/slapd/back-ldbm/matchrule.c
+index 043c968..7af42f4 100644
+--- a/ldap/servers/slapd/back-ldbm/matchrule.c
++++ b/ldap/servers/slapd/back-ldbm/matchrule.c
+@@ -118,6 +118,7 @@ create_matchrule_indexer(Slapi_PBlock **pb,char* matchrule,char* type)
+ int 
+ destroy_matchrule_indexer(Slapi_PBlock *pb)
+ {
++	Slapi_Value **keys = NULL;
+ 	IFP mrDESTROY = NULL;
+ 	if (!slapi_pblock_get (pb, SLAPI_PLUGIN_DESTROY_FN, &mrDESTROY))
+ 	{
+@@ -126,6 +127,18 @@ destroy_matchrule_indexer(Slapi_PBlock *pb)
+     		mrDESTROY (pb);
+         }
+ 	}
++	/* matching rule indexers which handle Slapi_Value**
++	   directly will own the keys, free them, and set
++	   SLAPI_PLUGIN_MR_KEYS to NULL in the destroy
++	   function - the old style matching rule indexers
++	   which only deal with struct berval ** will not
++	   free the Slapi_Value** wrappers so we have to free
++	   them here */
++	slapi_pblock_get(pb, SLAPI_PLUGIN_MR_KEYS, &keys);
++	if (keys) {
++		valuearray_free(&keys);
++		slapi_pblock_set(pb, SLAPI_PLUGIN_MR_KEYS, NULL);
++	}
+ 	return 0;
+ }
+ 
+@@ -158,6 +171,19 @@ matchrule_values_to_keys_sv(Slapi_PBlock *pb,Slapi_Value **input_values,Slapi_Va
+ 	IFP mrINDEX = NULL;
+ 
+ 	slapi_pblock_get (pb, SLAPI_PLUGIN_MR_INDEX_SV_FN, &mrINDEX);
++	if (NULL == mrINDEX) { /* old school - does not have SV function */
++		int rc;
++		struct berval **bvi = NULL, **bvo = NULL;
++		valuearray_get_bervalarray(input_values, &bvi);
++		rc = matchrule_values_to_keys(pb, bvi, &bvo);
++		ber_bvecfree(bvi);
++		/* note - the indexer owns bvo and will free it when destroyed */
++		valuearray_init_bervalarray(bvo, output_values);
++		/* store output values in SV form - caller expects SLAPI_PLUGIN_MR_KEYS is Slapi_Value** */
++		slapi_pblock_set(pb, SLAPI_PLUGIN_MR_KEYS, *output_values);
++		return rc;
++	}
++
+ 	slapi_pblock_set (pb, SLAPI_PLUGIN_MR_VALUES, input_values);
+ 	mrINDEX (pb);
+ 	slapi_pblock_get (pb, SLAPI_PLUGIN_MR_KEYS, output_values);
+diff --git a/ldap/servers/slapd/plugin_mr.c b/ldap/servers/slapd/plugin_mr.c
+index 7590f26..12dece7 100644
+--- a/ldap/servers/slapd/plugin_mr.c
++++ b/ldap/servers/slapd/plugin_mr.c
+@@ -634,6 +634,8 @@ default_mr_indexer_destroy(Slapi_PBlock* pb)
+ 	mr_private_free(&mrpriv);
+ 	mrpriv = NULL;
+ 	slapi_pblock_set(pb, SLAPI_PLUGIN_OBJECT, mrpriv);
++	/* keys destroyed in mr_private_free */
++	slapi_pblock_set(pb, SLAPI_PLUGIN_MR_KEYS, NULL);
+ 
+ 	return 0;
+ }
+-- 
+1.7.1
+

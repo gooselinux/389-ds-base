@@ -1,0 +1,115 @@
+From 466b0b51101eefc38cba5c964bba310fa8a07011 Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Fri, 1 Apr 2011 19:10:54 -0600
+Subject: [PATCH 13/16] Bug 693451 - cannot use localized matching rules
+
+https://bugzilla.redhat.com/show_bug.cgi?id=693451
+Resolves: bug 693451
+Bug Description: cannot use localized matching rules
+Reviewed by: nkinder (Thanks!)
+Branch: RHEL-6
+Fix Description: With the new matching rule code, the old method of
+identifying a simple matching rule that can use a compare function is
+not valid.  All of the collation plugin matching rules are ordering,
+either ignore case or exact case.  So we need another way to tell if
+the matching rule can use a simple compare function to generate index
+keys.  The new function
+int slapi_matchingrule_can_use_compare_fn(const char *mr_oid_or_name);
+is used for this purpose.  It looks up the oid of the matching rule and
+compares it to the oids used by the collation plugin.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+(cherry picked from commit cb2239082a27f00d470754e5924311bd9bee4b34)
+(cherry picked from commit ee0ab6921fbc6a92a554faa3218c36851b5cfe30)
+---
+ ldap/servers/slapd/back-ldbm/ldbm_attr.c |    1 +
+ ldap/servers/slapd/match.c               |   39 ++++++++++++++++++++++++++++++
+ ldap/servers/slapd/slapi-plugin.h        |   12 +++++++++
+ 3 files changed, 52 insertions(+), 0 deletions(-)
+
+diff --git a/ldap/servers/slapd/back-ldbm/ldbm_attr.c b/ldap/servers/slapd/back-ldbm/ldbm_attr.c
+index 8c09da0..b95f2ff 100644
+--- a/ldap/servers/slapd/back-ldbm/ldbm_attr.c
++++ b/ldap/servers/slapd/back-ldbm/ldbm_attr.c
+@@ -293,6 +293,7 @@ attr_index_config(
+ 				/* check if this is a simple ordering specification
+ 				   for an attribute that has no ordering matching rule */
+ 				} else if (slapi_matchingrule_is_ordering(index_rules[j], attrsyntax_oid) &&
++						   slapi_matchingrule_can_use_compare_fn(index_rules[j]) &&
+ 						   !a->ai_sattr.a_mr_ord_plugin) { /* no ordering for this attribute */
+ 					need_compare_fn = 1; /* get compare func for this attr */
+ 					do_continue = 1; /* done with j - next j */
+diff --git a/ldap/servers/slapd/match.c b/ldap/servers/slapd/match.c
+index 91fa0a8..fe5e365 100644
+--- a/ldap/servers/slapd/match.c
++++ b/ldap/servers/slapd/match.c
+@@ -333,3 +333,42 @@ int slapi_matchingrule_is_compat(const char *mr_oid_or_name, const char *syntax_
+ 
+     return 0;
+ }
++
++/* the matching rules defined in the collation plugin
++   all start with this OID
++*/
++#define COLLATION_BASE_OID "2.16.840.1.113730.3.3.2."
++#define COLLATION_BASE_OID_LEN 24
++
++/*
++  See if a matching rule for this name or OID
++  can use a simple compare function for generating index entries
++*/
++int slapi_matchingrule_can_use_compare_fn(const char *mr_oid_or_name)
++{
++    struct matchingRuleList *mrl=NULL;
++    int found = 0;
++
++    for (mrl = g_get_global_mrl(); mrl != NULL; mrl = mrl->mrl_next) {
++        if (mrl->mr_entry->mr_name && !strcasecmp(mr_oid_or_name, mrl->mr_entry->mr_name)) {
++            found = 1;
++            break;
++        }
++        if (mrl->mr_entry->mr_oid && !strcmp(mr_oid_or_name, mrl->mr_entry->mr_oid)) {
++            found = 1;
++            break;
++        }
++    }
++
++    if (!found) {
++        return 0;
++    }
++
++    if (!strncmp(mrl->mr_entry->mr_oid, COLLATION_BASE_OID, COLLATION_BASE_OID_LEN)) {
++        /* this OID is provided by the collation plugin so we can't just
++           use a simple compare function to generate index keys */
++        return 0;
++    }
++
++    return 1;
++}
+diff --git a/ldap/servers/slapd/slapi-plugin.h b/ldap/servers/slapd/slapi-plugin.h
+index f0be0a6..8531fbe 100644
+--- a/ldap/servers/slapd/slapi-plugin.h
++++ b/ldap/servers/slapd/slapi-plugin.h
+@@ -4659,6 +4659,18 @@ int slapi_matchingrule_is_ordering(const char *oid_or_name, const char *syntax_o
+  */
+ int slapi_matchingrule_is_compat(const char *mr_oid_or_name, const char *syntax_oid);
+ 
++/**
++ * In certain cases, we can just use a simple compare function to
++ * generate index keys.  The compare function is usually provided
++ * by the syntax plugin.  If this is the case, we can skip generating
++ * an indexer in the index config code.
++ * 
++ * \param mr_name_or_oid Name or OID of a matching rule
++ * \return \c TRUE if the matching rule can use a simple compare function
++ * \return \c FALSE otherwise 
++ */
++int slapi_matchingrule_can_use_compare_fn(const char *mr_oid_or_name);
++
+ /*
+  * access control
+  */
+-- 
+1.7.1
+

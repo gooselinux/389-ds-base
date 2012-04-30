@@ -1,0 +1,65 @@
+From 9a24dcd7f0447549c9657107171785c0399f223c Mon Sep 17 00:00:00 2001
+From: Rich Megginson <rmeggins@redhat.com>
+Date: Mon, 4 Apr 2011 14:20:06 -0600
+Subject: [PATCH 15/16] Bug 693503 - matching rules do not inherit from superior attribute type
+
+https://bugzilla.redhat.com/show_bug.cgi?id=693503
+Resolves: bug 693503
+Bug Description: matching rules do not inherit from superior attribute type
+Reviewed by: nkinder (Thanks!)
+Branch: RHEL-6
+Fix Description: If the attribute definition specifies a superior, use the
+superior equality, substrings, and ordering matching rule from the
+superior if not specified in the child.
+Platforms tested: RHEL6 x86_64
+Flag Day: no
+Doc impact: no
+(cherry picked from commit b5e708a3e907381c66fbcdba2ed1fd69a99198f3)
+(cherry picked from commit 87ca67e21f99bbc553aafc06d277dc6af53aad7a)
+---
+ ldap/servers/slapd/schema.c |   18 ++++++++++++++----
+ 1 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/ldap/servers/slapd/schema.c b/ldap/servers/slapd/schema.c
+index 14f3e76..4868b06 100644
+--- a/ldap/servers/slapd/schema.c
++++ b/ldap/servers/slapd/schema.c
+@@ -3441,21 +3441,31 @@ read_at_ldif(const char *input, struct asyntaxinfo **asipp, char *errorbuf,
+             status = invalid_syntax_error;
+         /* We only want to use the parent syntax if a SYNTAX
+          * wasn't explicitly specified for this attribute. */
+-        } else if (NULL == pSyntax) {
++        } else if ((NULL == pSyntax) || (NULL == pMREquality) || (NULL == pMRSubstring) ||
++                   (NULL == pMROrdering)) {
+             char *pso = asi_parent->asi_plugin->plg_syntax_oid;
+             
+-            if (pso) {
+-                slapi_ch_free ((void **)&pSyntax);
++            if (pso && (NULL == pSyntax)) {
+                 pSyntax = slapi_ch_strdup(pso);
+                 LDAPDebug (LDAP_DEBUG_TRACE,
+                     "Inheriting syntax %s from parent type %s\n",
+                     pSyntax, pSuperior,NULL);
+-            } else {
++            } else if (NULL == pSyntax) {
+                 schema_create_errormsg( errorbuf, errorbufsize,
+                     schema_errprefix_at, first_attr_name,
+                     "Missing parent attribute syntax OID");
+                 status = invalid_syntax_error;
+             }
++            
++            if (NULL == pMREquality) {
++                pMREquality = slapi_ch_strdup(asi_parent->asi_mr_equality);
++            }
++            if (NULL == pMRSubstring) {
++                pMRSubstring = slapi_ch_strdup(asi_parent->asi_mr_substring);
++            }
++            if (NULL == pMROrdering) {
++                pMROrdering = slapi_ch_strdup(asi_parent->asi_mr_ordering);
++            }
+             attr_syntax_return( asi_parent );
+         }
+     }
+-- 
+1.7.1
+
