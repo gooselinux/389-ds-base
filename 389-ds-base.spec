@@ -19,7 +19,7 @@
 Summary:          389 Directory Server (base)
 Name:             389-ds-base
 Version:          1.2.8.2
-Release:          %{?relprefix}1%{?prerel}%{?dist}
+Release:          %{?relprefix}1%{?prerel}%{?dist}.goose.1
 License:          GPLv2 with exceptions
 URL:              http://port389.org/
 Group:            System Environment/Daemons
@@ -29,6 +29,7 @@ Requires:         %{name}-libs = %{version}-%{release}
 BuildRequires:    nspr-devel
 BuildRequires:    nss-devel
 BuildRequires:    svrcore-devel
+BuildRequires:    gcc-c++
 %if %{use_openldap}
 BuildRequires:    openldap-devel
 %else
@@ -322,6 +323,9 @@ exit 0
 %{_libdir}/%{pkgname}/libslapd.so.*
 
 %changelog
+* Mon Apr 30 2011 Clint Savage <herlo@gooseproject.org> - 1.2.8.2-1.goose.1
+- Added BR for gcc-c++ per BZ#674723
+
 * Thu Apr 14 2011 Rich Megginson <rmeggins@redhat.com> - 1.2.8.2-1
 - 389-ds-base-1.2.8.2
 - Bug 696407 - If an entry with a mixed case RDN is turned to be
